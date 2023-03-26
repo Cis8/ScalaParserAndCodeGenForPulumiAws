@@ -1,4 +1,4 @@
-package scalaparser.listmethodsnames
+package scalaparser
 
 import java.io.File
 

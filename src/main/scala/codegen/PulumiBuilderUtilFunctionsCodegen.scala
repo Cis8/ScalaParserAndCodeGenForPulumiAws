@@ -20,13 +20,16 @@ object PulumiBuilderUtilFunctionsCodegen {
   def writeContentForBuilders(files: LinkedList[String], builderTypes: Map[String, (String, LinkedList[String])]) : Unit =
     //println("Text to write: " + JavaConverters.asJavaCollection[String](defaultLibs).toString())
     //println(defaultLibs.mkString(sys.props("line.separator")))
-    templateBuilders.append("package tmp\n\n")
+    templateBuilders.append("package com.cisotto.myvpc.function\n\n")
     templateBuilders.append(defaultLibs.mkString("\n"))
     templateBuilders.append("\n\n")
     /*template.append(generatedLibraries(files.asScala.toArray).mkString("\n"))
     template.append("\n\n")*/
+
     val generatedTypesVal = generatedTypes(builderTypes)
     templateBuilders.append(generatedTypesVal.mkString("\n"))
+    templateBuilders.append("\n\n")
+    templateBuilders.append("def parent(parent: Resource)(using ob: CustomResourceOptions.Builder): Unit = \n\tob.parent(parent)")
     templateBuilders.append("\n\n")
     templateBuilders.append(implicitConversionFunctions())
     templateBuilders.append("\n\n")
@@ -35,11 +38,13 @@ object PulumiBuilderUtilFunctionsCodegen {
     templateBuilders.append("\n\n")
     closeBuilderFile()
 
-  def writeContentForFunctions(extractedConstructors: Array[String]) : Unit =
-    templateFunctions.append("package tmp\n\n")
+  def writeContentForConstructors(extractedConstructors: Array[String]) : Unit =
+    templateFunctions.append("package com.cisotto.myvpc.function\n\n")
     templateFunctions.append(defaultLibs.mkString("\n"))
     templateFunctions.append("\n\n")
-    val genCons = generatedConstructors(extractedConstructors)
+    templateFunctions.append("def baseOpts(using o: CustomResourceOptions.Builder) : Unit = {} ")
+    templateFunctions.append("\n\n")
+    val genCons = generateConstructors(extractedConstructors)
     templateFunctions.append(genCons.mkString("\n\n"))
     templateFunctions.append("\n\n")
     templateFunctions.append("def availabilityZonesNames(): Output[com.pulumi.aws.outputs.GetAvailabilityZonesResult] = com.pulumi.aws.AwsFunctions.getAvailabilityZones(com.pulumi.aws.inputs.GetAvailabilityZonesArgs.builder()\n  .state(\"available\")\n  .build())\n\n")
@@ -58,6 +63,8 @@ object PulumiBuilderUtilFunctionsCodegen {
     "import scala.compiletime.ops.boolean",
     "import scala.compiletime.ops.string",
     "import scala.language.implicitConversions",
+    "import com.pulumi.resources.CustomResourceOptions",
+    "import com.pulumi.resources.ResourceArgs",
   )
 
   def genTypes(builderTypes: Map[String, (String, LinkedList[String])]) : Array[String] = {
@@ -89,11 +96,11 @@ object PulumiBuilderUtilFunctionsCodegen {
 
     builderTypes.toList match
       case m if m.isEmpty => Array.empty
-      case (k -> ts) :: tail => 
+      case (k -> ts) :: tail =>
         ("type " + k + "Owners = " + builderTypes.get(k.toString)
         .get._2
         .asScala
-        .mkString(" | ")) 
+        .mkString(" | "))
         +: generatedTypes(builderTypes.tail)
         //.map(s => s + ".Builder")
 
@@ -107,16 +114,19 @@ object PulumiBuilderUtilFunctionsCodegen {
       Array.empty*/
   }
 
-  def generatedConstructors(extractedConstructors: Array[String]) : Array[String] =
+  def generateConstructors(extractedConstructors: Array[String]) : Array[String] =
     for con <- extractedConstructors
       yield {
         val functionName = con.drop(con.lastIndexOf('.') + 1)
-        val builderCon = con + "Args.Builder";
-        "def " + functionName.head.toLower + functionName.tail + "(param: String, optOptions: Option[CustomResourceOptions] = None) (init: " + builderCon + " ?=> Unit): " + con + " =\n" +
-        "\tgiven b: " + builderCon + "= " + con + "Args.builder()\n" +
+        val builderCon = s"${con}Args.Builder";
+        val funName = functionName.head.toLower + functionName.tail
+        s"def $funName (param: String)(init: $builderCon ?=> Unit, " +
+          s"initOpt: (CustomResourceOptions.Builder ?=> Unit) = baseOpts): $con =\n" +
+        s"\tgiven b: $builderCon = ${con}Args.builder()\n" +
         "\tinit\n" +
-        "\toptOptions.map(o =>\n" +
-        "\t\tnew " + con + "(param, b.build(), o)).getOrElse(new " + con + "(param, b.build()))"
+        "\tgiven bo: CustomResourceOptions.Builder = CustomResourceOptions.builder()\n" +
+        "\tinitOpt\n" +
+        s"\tnew ${con}(param, b.build(), bo.build())"
       }
 
   // auto-generated methods
@@ -126,7 +136,11 @@ object PulumiBuilderUtilFunctionsCodegen {
       "\t.asJava\n\n" +
       "implicit def convertScalaMapToJavaMap[A, B](scalaMap: Map[A, B]): java.util.Map[A, B] =\n" +
       "\tscalaMap\n" +
-      "\t.asJava\n\n"
+      "\t.asJava\n\n"+
+      "given tupleToMap[A, B]: Conversion[(A, B), Map[A, B]] =\n" +
+      "\t(tuple: (A, B)) => Map(tuple)\n\n" +
+      "given elemToList[A <: ResourceArgs]: Conversion[A, List[A]] =\n" +
+      "\t(elem: A) => List(elem)\n"
 
   def addAwsInputsPackage(pt: String) : String =
     val x = if pt.contains("java.util.") then "[\\[]".r.replaceAllIn(pt, "\\[com.pulumi.aws.ec2.inputs.") else "com.pulumi.aws.ec2.inputs." + pt

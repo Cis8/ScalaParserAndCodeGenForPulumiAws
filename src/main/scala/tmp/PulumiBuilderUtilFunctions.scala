@@ -1,4 +1,4 @@
-package tmp
+package com.cisotto.myvpc.function
 
 import com.pulumi.Context
 import com.pulumi.Pulumi
@@ -9,6 +9,8 @@ import collection.convert.ImplicitConversionsToScala.`collection AsScalaIterable
 import scala.compiletime.ops.boolean
 import scala.compiletime.ops.string
 import scala.language.implicitConversions
+import com.pulumi.resources.CustomResourceOptions
+import com.pulumi.resources.ResourceArgs
 
 type mapCustomerOwnedIpOnLaunchOwners = com.pulumi.aws.ec2.SubnetArgs.Builder
 type routesOwners = com.pulumi.aws.ec2.RouteTableArgs.Builder
@@ -55,6 +57,9 @@ type ipv4IpamPoolIdOwners = com.pulumi.aws.ec2.VpcArgs.Builder
 type enableClassiclinkOwners = com.pulumi.aws.ec2.VpcArgs.Builder
 type customerOwnedIpv4PoolOwners = com.pulumi.aws.ec2.SubnetArgs.Builder
 
+def parent(parent: Resource)(using ob: CustomResourceOptions.Builder): Unit = 
+	ob.parent(parent)
+
 implicit def convertScalaListToJavaList[A](scalaList: List[A]): java.util.List[A] =
 	scalaList
 	.asJava
@@ -63,6 +68,11 @@ implicit def convertScalaMapToJavaMap[A, B](scalaMap: Map[A, B]): java.util.Map[
 	scalaMap
 	.asJava
 
+given tupleToMap[A, B]: Conversion[(A, B), Map[A, B]] =
+	(tuple: (A, B)) => Map(tuple)
+
+given elemToList[A <: ResourceArgs]: Conversion[A, List[A]] =
+	(elem: A) => List(elem)
 
 
 def mapCustomerOwnedIpOnLaunch(param: java.lang.Boolean | Output[java.lang.Boolean])(using b: mapCustomerOwnedIpOnLaunchOwners): Unit =
